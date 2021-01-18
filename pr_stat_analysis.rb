@@ -26,11 +26,12 @@ puts "Processing #{repo.name} (#{repo.id})..."
 
 prs = client.pull_requests(repo.id, state: 'all')
 merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
+recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 4}
+puts "Number of PRs to analyze: #{recent_prs.size}"
 
-grouped = merged_prs.group_by_week{|pr| pr.created_at}
-recent_groups = grouped.select{|key, group| TimeDifference.between(Time.now, key).in_weeks < 4}
+grouped = recent_prs.group_by_week{|pr| pr.created_at}
 
-data = recent_groups.map do |key, group|
+data = grouped.map do |key, group|
 	puts "---- #{key} ----"
 
 	per_pr = group.map do |pr|

@@ -26,7 +26,7 @@ puts "Processing #{repo.name} (#{repo.id})..."
 
 prs = client.pull_requests(repo.id, state: 'all')
 merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
-recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 1}
+recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 4}
 puts "Number of PRs to analyze: #{recent_prs.size}"
 
 data = recent_prs.map do |pr|
