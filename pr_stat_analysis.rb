@@ -26,7 +26,7 @@ puts "Processing #{repo.name} (#{repo.id})..."
 
 prs = client.pull_requests(repo.id, state: 'all')
 merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
-recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 4}
+recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 7}
 puts "Number of PRs to analyze: #{recent_prs.size}"
 
 grouped = recent_prs.group_by_week{|pr| pr.created_at}
@@ -37,7 +37,7 @@ data = grouped.map do |key, group|
 	per_pr = group.map do |pr|
 		time_to_merge = pr.merged_at.nil? ? nil : TimeDifference.between(pr.created_at, pr.merged_at).in_hours
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
-		puts "#{pr.number} (#{pr.user.login}) Created: #{pr.created_at.localtime}, Merged: #{pr.merged_at.localtime}, Merge time: #{time_to_merge}"    	    	
+		puts "#{pr.number} (#{pr.user.login}) Created: #{pr.created_at.localtime}, Merged: #{pr.merged_at.localtime}, Hours: #{time_to_merge}, WorkingHours: #{wh_time_to_merge}"   	    	
 		
 		raw_comments = client.review_comments(repo.id, pr.number)     	
 		puts "  Comments: #{raw_comments.size}"
@@ -49,12 +49,12 @@ data = grouped.map do |key, group|
     	first_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login)}
 	    time_to_first_review =  first_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, first_review&.submitted_at).in_hours
 	    wh_time_to_first_review =  first_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, first_review&.submitted_at) / 3600.0).round(2)
-		puts "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} TTM: #{time_to_first_review} TTMwh: #{wh_time_to_first_review}"
+		puts "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} Hours: #{time_to_first_review} WorkingHours: #{wh_time_to_first_review}"
 		    	
 	    second_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
 	    time_to_second_review =  second_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, second_review&.submitted_at).in_hours
     	wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
-		puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} TTM: #{time_to_second_review} TTMwh: #{wh_time_to_second_review}"
+		puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"
    	
         {
             title: pr.title,
@@ -84,6 +84,8 @@ data = grouped.map do |key, group|
 	max_changes = per_pr.max_by {|s| s[:changes_requested]}
 	{
 		week: key,
+		pr_count: per_pr.size,
+		
 		avg_comments: (per_pr.sum {|s| s[:comment_count]} / per_pr.size.to_f).round(2),
 		max_comments: max_comments[:comment_count],
 		max_comments_pr: "#{max_comments[:number]} (#{max_comments[:user]})",
@@ -94,16 +96,16 @@ data = grouped.map do |key, group|
 		
 		avg_merge_time_h: per_pr.sum {|s| s[:merge_time_h]} / per_pr.size,
 		avg_merge_time_wh: per_pr.sum {|s| s[:merge_time_wh]} / per_pr.size,
-		max_merge_time_wh: per_pr.max {|s| s[:merge_time_wh]}[:merge_time_wh],		
-		min_merge_time_wh: per_pr.min {|s| s[:merge_time_wh]}[:merge_time_wh],				
+		max_merge_time_wh: per_pr.max_by {|s| s[:merge_time_wh]}[:merge_time_wh],		
+		min_merge_time_wh: per_pr.min_by {|s| s[:merge_time_wh]}[:merge_time_wh],				
 		
 		avg_time_to_first_review_wh: per_pr.sum {|s| s[:first_review_time_wh]} / per_pr.size,
-		max_time_to_first_review_wh: per_pr.max {|s| s[:first_review_time_wh]}[:first_review_time_wh],
-		min_time_to_first_review_wh: per_pr.min {|s| s[:first_review_time_wh]}[:first_review_time_wh],
+		max_time_to_first_review_wh: per_pr.max_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
+		min_time_to_first_review_wh: per_pr.min_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
 		
 		avg_time_to_second_review_wh: per_pr.sum {|s| s[:second_review_time_wh]} / per_pr.size,
-		max_time_to_second_review_wh: per_pr.max {|s| s[:second_review_time_wh]}[:second_review_time_wh],
-		min_time_to_second_review_wh: per_pr.min {|s| s[:second_review_time_wh]}[:second_review_time_wh],
+		max_time_to_second_review_wh: per_pr.max_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
+		min_time_to_second_review_wh: per_pr.min_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
 	}
 end
 
