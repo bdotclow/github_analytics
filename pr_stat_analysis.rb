@@ -6,6 +6,10 @@ require 'time_difference'
 require 'working_hours'
 require 'groupdate'
 
+require_relative 'PRHelpers'
+
+MAX_WEEKS_TO_ANALYZE = 1
+
 #Do an "export GITHUB_API=zzzz" before running
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
 client.auto_paginate = true
@@ -24,12 +28,10 @@ reponame = ARGV[0]
 repo = client.repo(reponame)
 puts "Processing #{repo.name} (#{repo.id})..."
 
-prs = client.pull_requests(repo.id, state: 'all')
-merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
-recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 4}
-puts "Number of PRs to analyze: #{recent_prs.size}"
+recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_WEEKS_TO_ANALYZE)
+puts "Done loading PRs: #{recent_merged_prs.size} to analyze"
 
-grouped = recent_prs.group_by_week{|pr| pr.created_at}
+grouped = recent_merged_prs.group_by_week{|pr| pr.created_at}
 
 data = grouped.map do |key, group|
 	puts "---- #{key} ----"
@@ -78,6 +80,19 @@ data = grouped.map do |key, group|
    		
    		success_build = status_map.detect{|s| s[:state]="success"}
    		build_time = success_build.nil? ? 0 : success_build[:elapsed]
+   		
+   		status.each{|s| puts "#{s.created_at} - #{s.state} #{s.target_url}"}
+   		start_status = status.select {|s| s.state=="pending"}.last
+   		puts("First build: #{start_status[:created_at].localtime}")
+   		
+		
+		build_please = raw_comments.detect{|i| i.body.downcase.include? "build please"}
+		build_please = client.issue_comments(repo.id, pr.number).detect{|i| i.body.downcase.include? "build please"}
+		build_please_date = build_please.nil? ? nil : build_please[:created_at]&.localtime
+		time_to_build_please = build_please.nil? ? nil : TimeDifference.between(pr.created_at, build_please[:created_at]).in_minutes
+		puts "Build please: #{build_please_date}"
+		puts "First Build Please: #{time_to_build_please} min"
+
 
         {
             title: pr.title,
