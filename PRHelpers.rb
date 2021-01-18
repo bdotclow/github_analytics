@@ -7,6 +7,7 @@ require 'working_hours'
 module PRHelpers
 	extend self
 
+# Stats about number of lines changed
 def get_pr_commit_stats(client, repo, commits) 
 	changes = 0
 	stats = commits.map do |commit|
@@ -26,20 +27,21 @@ def get_pr_commit_stats(client, repo, commits)
 	}
 end
 
+# Info about reviews - elapsed time until reviews happened, and count of CHANGED_REQUESTED revies
 def get_pr_review_info(client, repo, pr) 	
 	raw_reviews = client.pull_request_reviews(repo.id,pr.number)
    	changes_requested = raw_reviews.count{|r| "CHANGES_REQUESTED".eql?(r.state)}
-   	puts "  Changes requested: #{changes_requested}" 	
+   	#puts "  Changes requested: #{changes_requested}" 	
 	   	
    	first_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login)}
     time_to_first_review =  first_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, first_review&.submitted_at).in_hours
     wh_time_to_first_review =  first_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, first_review&.submitted_at) / 3600.0).round(2)
-	puts "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} Hours: #{time_to_first_review} WorkingHours: #{wh_time_to_first_review}"
+	#puts "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} Hours: #{time_to_first_review} WorkingHours: #{wh_time_to_first_review}"
 		    	
     second_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
     time_to_second_review =  second_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, second_review&.submitted_at).in_hours
    	wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
-	puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"   	
+	#puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"   	
 	
 	{ 
 		changes_requested: changes_requested,
@@ -50,6 +52,11 @@ def get_pr_review_info(client, repo, pr)
 	}
 end
 
+# Track information about builds by looking at statuses
+# Completed builds times determined by looking for statuses with matching target URLs
+# 	that have both a pending and a success/failure
+#
+# Return count of completed builds and information about each
 def get_build_info(client, repo, pr) 
 	status = client.statuses(repo.id, pr.head.sha)
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
@@ -63,82 +70,81 @@ def get_build_info(client, repo, pr)
    			build_url: s.target_url
 		}
    	end
- 	completed_status_map.each { |s| puts "  Build #{s[:state]} - #{s[:elapsed]} minutes - #{s[:build_url]}"}
+ 	#completed_status_map.each { |s| puts "  Build #{s[:state]} - #{s[:elapsed]} minutes - #{s[:build_url]}"}
    	
    	{
-   	 	success_build: completed_status_map.detect{|s| s[:state]="success"},
-   		start_status: status.select {|s| s.state=="pending"}.last,
-   		
+   	 	first_successful_build: completed_status_map.detect{|s| s[:state]="success"},
    		completed_status_map: completed_status_map,
    	}
 end
 
 def get_pr_stats(repo, client, prs) 
-	data = prs.map do |pr|
+	prs.map do |pr|
+		puts "PR #{pr.number}"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
 		# Analyze reviews
 		review_info = get_pr_review_info(client, repo, pr)
-		ap review_info
+		#ap review_info
 
 		# Analyze commits
 		commits = client.pull_request_commits(repo.id, pr.number)
 		commit_stats = get_pr_commit_stats(client, repo, commits)
-		ap commit_stats
+		#ap commit_stats
 		
    			#NB: &.< handles the case when no first review - safe navigation evaluates to nil, which is falsey
    		after_first_review = commits.select{ |c| review_info[:first_review_submitted_at] &.< c.commit.committer.date }					 
-   		puts("  Commits after first review: #{after_first_review.size}")
+   		#puts("  Commits after first review: #{after_first_review.size}")
 		
 		files = client.pull_request_files(repo.id, pr.number)
-		puts "#{pr.number}, #{files.size}, #{commits.size}, #{wh_time_to_merge}"
-   		
-   		raw_comments = client.review_comments(repo.id, pr.number)     	
+		
+   		raw_comments = client.review_comments(repo.id, pr.number)  
+
 
    		# Analyze builds
    		build_info = get_build_info(client, repo, pr)
-   		build_time = build_info[:success_build].nil? ? 0 : build_info[:success_build][:elapsed]
-        failed_builds = build_info[:completed_status_map].select{|s| s[:state]=="failure"}.size,
+   		build_time = build_info[:first_successful_build].nil? ? 0 : build_info[:first_successful_build][:elapsed]
    		
+   		successful_builds = build_info[:completed_status_map].select{|s| s[:state]="success"}
+		build_time = successful_builds.sum{|s| s[:elapsed]} / successful_builds.size.to_f
+        failed_builds = build_info[:completed_status_map].select{|s| s[:state]=="failure"}.size
+
 		build_please = raw_comments.detect{|i| i.body.downcase.include? "build please"}
 		build_please = client.issue_comments(repo.id, pr.number).detect{|i| i.body.downcase.include? "build please"}
 		build_please_date = build_please.nil? ? nil : build_please[:created_at]&.localtime
 		time_to_build_please = build_please.nil? ? nil : TimeDifference.between(pr.created_at, build_please[:created_at]).in_minutes
-		puts "Build please: #{build_please_date}"
-		puts "First Build Please: #{time_to_build_please} min"
+		#puts "Build please: #{build_please_date}"
+		#puts "First Build Please: #{time_to_build_please} min"
 
 
-		
 		{
             number: pr.number,
 
-            changes: commit_stats[:changes],
-            additions: commit_stats[:additions],
-            deletions: commit_stats[:deletions],
+            lines_changed: commit_stats[:changes],
+            lines_added: commit_stats[:additions],
+            lines_removed: commit_stats[:deletions],
             
-            files: files.size,
-            commits: commits.size,
-            merge_time_wh: wh_time_to_merge || 0,
-            			
+            file_count: files.size,
+            commit_count: commits.size,
+            
+            merge_time_wh: wh_time_to_merge || 0,	
 			first_review_time_wh: review_info[:wh_time_to_first_review] || 0,
 			second_review_time_wh: review_info[:wh_time_to_second_review] || 0,
 
             comment_count: raw_comments.size,
-            num_changes_requested: review_info[:changes_requested],
+            changes_requested: review_info[:changes_requested],
             commits_after_first_review: after_first_review.size,
             
             failed_builds: failed_builds,
             successful_build_time: build_time,
         }
 	end
-
-	data
 end
 
 #
-# Get the recently merged PRs that have been created less than max_weeks ago
+# Get the recently merged PRs that have been created less than max_days ago
 # (Don't use Octokit auto-pagination so it doesn't take forever to load the PR list) 
-def get_recent_merged_prs(client, repo, max_weeks) 
+def get_recent_merged_prs(client, repo, max_days) 
 	ap = client.auto_paginate
 	client.auto_paginate = false
 	
@@ -155,7 +161,7 @@ def get_recent_merged_prs(client, repo, max_weeks)
 			prs = client.get(next_rel.href)
 		end
 				
-		recent_prs = prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < max_weeks}
+		recent_prs = prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_days < max_days}
 		merged_prs.concat recent_prs.select{ |pr| !pr.merged_at.nil? }
 		
 		break if (recent_prs.size < prs.size)

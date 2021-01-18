@@ -6,7 +6,7 @@ require 'time_difference'
 
 require_relative 'PRHelpers'
 
-MAX_WEEKS_TO_ANALYZE = 1
+MAX_DAYS_TO_ANALYZE = 7
 
 #Do an "export GITHUB_API=zzzz" before running
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
@@ -16,7 +16,7 @@ reponame = ARGV[0]
 repo = client.repo(reponame)
 puts "Processing #{repo.name} (#{repo.id})..."
 
-recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_WEEKS_TO_ANALYZE)
+recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE)
 puts "Done loading PRs: #{recent_merged_prs.size} to analyze"
 
 data = PRHelpers.get_pr_stats(repo, client, recent_merged_prs)
