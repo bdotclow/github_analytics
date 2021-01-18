@@ -6,10 +6,6 @@ require 'time_difference'
 require 'working_hours'
 require 'groupdate'
 
-#Do an "export GITHUB_API=zzzz" before running
-client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
-client.auto_paginate = true
-
 WorkingHours::Config.working_hours = {
   :mon => {'08:00' => '18:00'},
   :tue => {'08:00' => '18:00'},
@@ -20,9 +16,8 @@ WorkingHours::Config.working_hours = {
 WorkingHours::Config.time_zone = "Eastern Time (US & Canada)"
 Groupdate.time_zone = "Eastern Time (US & Canada)"
 
-reponame = ARGV[0]
-repo = client.repo(reponame)
-puts "Processing #{repo.name} (#{repo.id})..."
+MAX_WEEKS_TO_ANALYZE = 1
+
 
 def get_pr_commit_stats(client, repo, commits) 
 	changes = 0
@@ -43,8 +38,7 @@ def get_pr_commit_stats(client, repo, commits)
 	}
 end
 
-def get_pr_review_info(client, repo, pr) 
-		
+def get_pr_review_info(client, repo, pr) 	
 	raw_reviews = client.pull_request_reviews(repo.id,pr.number)
    	changes_requested = raw_reviews.count{|r| "CHANGES_REQUESTED".eql?(r.state)}
    	puts "  Changes requested: #{changes_requested}" 	
@@ -153,16 +147,47 @@ def get_pr_stats(repo, client, prs)
 	data
 end
 
+#
+# Get the recently merged PRs that have been created less than max_weeks ago
+# (Don't use Octokit auto-pagination so it doesn't take forever to load the PR list) 
+def get_recent_merged_prs(client, repo, max_weeks) 
+	prs = nil
+	merged_prs = []
+
+	loop do
+		if prs.nil?
+			prs = client.pull_requests(repo.id, state: 'closed')
+		else
+			next_rel = client.last_response.rels[:next]
+			break if (next_rel.nil?)
+	
+			prs = client.get(next_rel.href)
+		end
+				
+		recent_prs = prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < max_weeks}
+		merged_prs.concat recent_prs.select{ |pr| !pr.merged_at.nil? }
+		
+		break if (recent_prs.size < prs.size)
+	end
+	
+	#puts "PRs merged during period: #{merged_prs.map{|pr| pr.number}}"
+	merged_prs
+end
 
 
-prs = client.pull_requests(repo.id, state: 'closed')
-merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
-recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 8}
-puts "Number of PRs to analyze: #{recent_prs.size}"
+#Do an "export GITHUB_API=zzzz" before running
+client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
 
-data = get_pr_stats(repo, client, recent_prs)
+reponame = ARGV[0]
+repo = client.repo(reponame)
+puts "Processing #{repo.name} (#{repo.id})..."
 
+recent_merged_prs = get_recent_merged_prs(client, repo, MAX_WEEKS_TO_ANALYZE)
+puts "Done loading PRs: #{recent_merged_prs.size} to analyze"
 
+data = get_pr_stats(repo, client, recent_merged_prs)
+
+#Write a CSV containing all the retrieved data
 ap data, :index => false
 
 column_names = data.first.keys
