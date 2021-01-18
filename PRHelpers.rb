@@ -172,6 +172,19 @@ def get_recent_merged_prs(client, repo, max_days)
 	merged_prs
 end
 
+def mean(array)
+  (array.inject(0) { |sum, x| sum += x } / array.size.to_f).round(2)
+end
+
+# If the array has an odd number, then simply pick the one in the middle
+# If the array size is even, then we must calculate the mean of the two middle.
+def median(array, already_sorted=false)
+  return nil if array.empty?
+  array = array.sort unless already_sorted
+  m_pos = array.size / 2
+  return array.size % 2 == 1 ? array[m_pos] : mean(array[m_pos-1..m_pos])
+end
+
 end
 
 

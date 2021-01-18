@@ -8,10 +8,10 @@ require 'groupdate'
 
 require_relative 'PRHelpers'
 
-MAX_DAYS_TO_ANALYZE = 7
+MAX_DAYS_TO_ANALYZE = 28
 
 #Do an "export GITHUB_API=zzzz" before running
-client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
+client = Octokit::Client.new(access_token: ENV['GITHUB_API'], per_page: 100)
 client.auto_paginate = true
 
 WorkingHours::Config.working_hours = {
@@ -54,8 +54,11 @@ data = grouped.map do |key, group|
 		week: key,
 		pr_count: per_pr.size,
 		
-		avg_lines_changed: (per_pr.sum {|s| s[:lines_changed]} / per_pr.size.to_f).round(2),
-		avg_file_count: (per_pr.sum {|s| s[:file_count]} / per_pr.size.to_f).round(2),
+		avg_lines_changed: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
+		avg_file_count: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
+		
+		median_lines_changed: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
+		median_file_count: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
 		
 		pr_with_commits_after_first_review: pr_with_commits_after_first_review,
 		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
@@ -63,14 +66,19 @@ data = grouped.map do |key, group|
 		pr_with_changes_requested: pr_with_changes_requested,
 		percent_changes_requested: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
 		
-		avg_merge_time_wh: (per_pr.sum {|s| s[:merge_time_wh]} / per_pr.size).round(2),
-		avg_time_to_first_review_wh: (per_pr.sum {|s| s[:first_review_time_wh]} / per_pr.size).round(2),
-		avg_time_to_second_review_wh: (per_pr.sum {|s| s[:second_review_time_wh]} / per_pr.size).round(2),
-		avg_successful_build_time: (pr_with_successful_builds.sum{|s| s[:successful_build_time]} / pr_with_successful_builds.size.to_f).round(2),		
+		avg_merge_time_wh: PRHelpers.mean(per_pr.map{|s| s[:merge_time_wh]}),	
+		avg_time_to_first_review_wh: PRHelpers.mean(per_pr.map{|s| s[:first_review_time_wh]}),
+		avg_time_to_second_review_wh: PRHelpers.mean(per_pr.map {|s| s[:second_review_time_wh]}),
+		avg_successful_build_time: PRHelpers.mean(pr_with_successful_builds.map{|s| s[:successful_build_time]}),		
+		
+		median_merge_time_wh: PRHelpers.median(per_pr.map{|s| s[:merge_time_wh]}),	
+		median_time_to_first_review_wh: PRHelpers.median(per_pr.map{|s| s[:first_review_time_wh]}),
+		median_time_to_second_review_wh: PRHelpers.median(per_pr.map {|s| s[:second_review_time_wh]}),
+		median_successful_build_time: PRHelpers.median(pr_with_successful_builds.map{|s| s[:successful_build_time]}),		
 		
 		pr_with_build_failure: per_pr.select {|s| s[:failed_builds] > 0}.size,
-		avg_comments: (per_pr.sum {|s| s[:comment_count]} / per_pr.size.to_f).round(2),
-		avg_changes_requested: (per_pr.sum {|s| s[:changes_requested]} / per_pr.size.to_f).round(2),
+		avg_comments: PRHelpers.mean(per_pr.map {|s| s[:comment_count]}),
+		avg_changes_requested: PRHelpers.mean(per_pr.map {|s| s[:changes_requested]}),
 
 		max_comments: max_comments[:comment_count],
 		

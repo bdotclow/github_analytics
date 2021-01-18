@@ -9,7 +9,7 @@ require_relative 'PRHelpers'
 MAX_DAYS_TO_ANALYZE = 7
 
 #Do an "export GITHUB_API=zzzz" before running
-client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
+client = Octokit::Client.new(access_token: ENV['GITHUB_API'], per_page: 100)
 client.auto_paginate = true
 
 reponame = ARGV[0]
