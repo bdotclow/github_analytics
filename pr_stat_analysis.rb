@@ -87,23 +87,32 @@ data = grouped.map do |key, group|
 		pr_count: per_pr.size,
 		
 		avg_comments: (per_pr.sum {|s| s[:comment_count]} / per_pr.size.to_f).round(2),
+		avg_changes_requested: (per_pr.sum {|s| s[:changes_requested]} / per_pr.size.to_f).round(2),
+		avg_merge_time_wh: per_pr.sum {|s| s[:merge_time_wh]} / per_pr.size,
+		avg_time_to_first_review_wh: per_pr.sum {|s| s[:first_review_time_wh]} / per_pr.size,
+		avg_time_to_second_review_wh: per_pr.sum {|s| s[:second_review_time_wh]} / per_pr.size,
+		
 		max_comments: max_comments[:comment_count],
 		max_comments_pr: "#{max_comments[:number]} (#{max_comments[:user]})",
-				
-		avg_changes_requested: (per_pr.sum {|s| s[:changes_requested]} / per_pr.size.to_f).round(2),
+		
 		max_changes: per_pr.max_by {|s| s[:changes_requested]}[:changes_requested],
 		max_changes_pr: "#{max_changes[:number]} (#{max_changes[:user]})",
 		
 		avg_merge_time_h: per_pr.sum {|s| s[:merge_time_h]} / per_pr.size,
-		avg_merge_time_wh: per_pr.sum {|s| s[:merge_time_wh]} / per_pr.size,
-		max_merge_time_wh: per_pr.max_by {|s| s[:merge_time_wh]}[:merge_time_wh],		
+		max_merge_time_h: per_pr.max_by {|s| s[:merge_time_h]}[:merge_time_h],	
+		min_merge_time_h: per_pr.min_by {|s| s[:merge_time_h]}[:merge_time_h],					
+		max_merge_time_wh: per_pr.max_by {|s| s[:merge_time_wh]}[:merge_time_wh],
 		min_merge_time_wh: per_pr.min_by {|s| s[:merge_time_wh]}[:merge_time_wh],				
 		
-		avg_time_to_first_review_wh: per_pr.sum {|s| s[:first_review_time_wh]} / per_pr.size,
+		avg_time_to_first_review_h: per_pr.sum {|s| s[:merge_time_h]} / per_pr.size,
+		max_time_to_first_review_h: per_pr.max_by {|s| s[:first_review_time_h]}[:first_review_time_h],
+		min_time_to_first_review_h: per_pr.min_by {|s| s[:first_review_time_h]}[:first_review_time_h],
 		max_time_to_first_review_wh: per_pr.max_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
 		min_time_to_first_review_wh: per_pr.min_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
 		
-		avg_time_to_second_review_wh: per_pr.sum {|s| s[:second_review_time_wh]} / per_pr.size,
+		avg_time_to_second_review_h: per_pr.sum {|s| s[:second_review_time_h]} / per_pr.size,
+		max_time_to_second_review_h: per_pr.max_by {|s| s[:second_review_time_h]}[:second_review_time_h],
+		min_time_to_second_review_h: per_pr.min_by {|s| s[:second_review_time_h]}[:second_review_time_h],
 		max_time_to_second_review_wh: per_pr.max_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
 		min_time_to_second_review_wh: per_pr.min_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
 	}
