@@ -58,10 +58,10 @@ data = grouped.map do |key, group|
 		avg_file_count: (per_pr.sum {|s| s[:file_count]} / per_pr.size.to_f).round(2),
 		
 		pr_with_commits_after_first_review: pr_with_commits_after_first_review,
-		percent_commits_after_first_review: (pr_with_commits_after_first_review / per_pr.size.to_f).round(2),
+		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
 		
 		pr_with_changes_requested: pr_with_changes_requested,
-		percent_changes_requested: (pr_with_changes_requested / per_pr.size.to_f).round(2),
+		percent_changes_requested: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
 		
 		avg_merge_time_wh: (per_pr.sum {|s| s[:merge_time_wh]} / per_pr.size).round(2),
 		avg_time_to_first_review_wh: (per_pr.sum {|s| s[:first_review_time_wh]} / per_pr.size).round(2),
