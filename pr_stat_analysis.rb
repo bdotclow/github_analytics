@@ -8,7 +8,7 @@ require 'groupdate'
 
 require_relative 'PRHelpers'
 
-MAX_DAYS_TO_ANALYZE = 4
+MAX_DAYS_TO_ANALYZE = 5
 
 #Do an "export GITHUB_API=zzzz" before running
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
@@ -36,15 +36,17 @@ grouped = recent_merged_prs.group_by_week{|pr| pr.created_at}
 data = grouped.map do |key, group|
 	puts "---- #{key} (#{group.size} PRs)----"
 
+	start = Time.now
 	per_pr = PRHelpers.get_pr_stats(repo, client, group)
+	
+	puts "Took #{Time.now - start} seconds to process #{group.size} PRs"
 	
 	max_comments = per_pr.max_by {|s| s[:comment_count]}
 	max_changes = per_pr.max_by {|s| s[:changes_requested]}
 	
 		# Early in repo history some PRs didn't have a build - exclude those from build calculation time
 	pr_with_successful_builds = per_pr.select {|s| s[:successful_build_time] > 0}
-	puts "#{pr_with_successful_builds.size}"
-	
+
 	pr_with_commits_after_first_review = per_pr.select {|s| s[:commits_after_first_review] > 0}.size
 	pr_with_changes_requested = per_pr.select {|s| s[:changes_requested] > 0}.size
 		
