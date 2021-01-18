@@ -151,6 +151,9 @@ end
 # Get the recently merged PRs that have been created less than max_weeks ago
 # (Don't use Octokit auto-pagination so it doesn't take forever to load the PR list) 
 def get_recent_merged_prs(client, repo, max_weeks) 
+	ap = client.auto_paginate
+	client.auto_paginate = false
+	
 	prs = nil
 	merged_prs = []
 
@@ -171,12 +174,14 @@ def get_recent_merged_prs(client, repo, max_weeks)
 	end
 	
 	#puts "PRs merged during period: #{merged_prs.map{|pr| pr.number}}"
+	client.auto_paginate = true
 	merged_prs
 end
 
 
 #Do an "export GITHUB_API=zzzz" before running
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
+client.auto_paginate = true
 
 reponame = ARGV[0]
 repo = client.repo(reponame)
