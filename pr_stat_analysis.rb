@@ -11,11 +11,11 @@ client = Octokit::Client.new(access_token: ENV['GITHUB_API'])
 client.auto_paginate = true
 
 WorkingHours::Config.working_hours = {
-  :mon => {'09:00' => '17:00'},
-  :tue => {'09:00' => '17:00'},
-  :wed => {'09:00' => '17:00'},
-  :thu => {'09:00' => '17:00'},
-  :fri => {'09:00' => '17:00'},
+  :mon => {'08:00' => '18:00'},
+  :tue => {'08:00' => '18:00'},
+  :wed => {'08:00' => '18:00'},
+  :thu => {'08:00' => '18:00'},
+  :fri => {'08:00' => '18:00'},
 }
 WorkingHours::Config.time_zone = "Eastern Time (US & Canada)"
 Groupdate.time_zone = "Eastern Time (US & Canada)"
@@ -26,7 +26,7 @@ puts "Processing #{repo.name} (#{repo.id})..."
 
 prs = client.pull_requests(repo.id, state: 'all')
 merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
-recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 7}
+recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 4}
 puts "Number of PRs to analyze: #{recent_prs.size}"
 
 grouped = recent_prs.group_by_week{|pr| pr.created_at}
@@ -38,6 +38,7 @@ data = grouped.map do |key, group|
 		time_to_merge = pr.merged_at.nil? ? nil : TimeDifference.between(pr.created_at, pr.merged_at).in_hours
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 		puts "#{pr.number} (#{pr.user.login}) Created: #{pr.created_at.localtime}, Merged: #{pr.merged_at.localtime}, Hours: #{time_to_merge}, WorkingHours: #{wh_time_to_merge}"   	    	
+		#ap pr
 		
 		raw_comments = client.review_comments(repo.id, pr.number)     	
 		puts "  Comments: #{raw_comments.size}"
@@ -56,6 +57,10 @@ data = grouped.map do |key, group|
     	wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
 		puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"
    	
+   		raw_commits = client.pull_request_commits(repo.id, pr.number)
+   		after_first_review = raw_commits.select{ |c| first_review!=nil && c.commit.committer.date > first_review.submitted_at}
+   		puts("  Commits: #{raw_commits.size} AfterFirstReview: #{after_first_review.size}")
+
         {
             title: pr.title,
             number: pr.number,
@@ -63,6 +68,7 @@ data = grouped.map do |key, group|
             state: pr.state,
             comment_count: raw_comments.size,
             changes_requested: changes_requested,
+            commits_after_first_review: after_first_review.size,
             
             created_at: pr.created_at.localtime,
             
@@ -85,6 +91,8 @@ data = grouped.map do |key, group|
 	{
 		week: key,
 		pr_count: per_pr.size,
+		pr_with_commits_after_first_review: per_pr.select {|s| s[:commits_after_first_review] > 0}.size,
+		pr_with_changes_requested: per_pr.select {|s| s[:changes_requested] > 0}.size,
 		
 		avg_comments: (per_pr.sum {|s| s[:comment_count]} / per_pr.size.to_f).round(2),
 		avg_changes_requested: (per_pr.sum {|s| s[:changes_requested]} / per_pr.size.to_f).round(2),
