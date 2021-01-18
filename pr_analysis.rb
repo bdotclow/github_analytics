@@ -1,6 +1,5 @@
 require 'octokit'
-require 'awesome_print'
-require 'yaml'
+require 'amazing_print'
 require 'byebug'
 require 'csv'
 require 'time_difference'
@@ -26,54 +25,55 @@ repo = client.repo(reponame)
 puts "Processing #{repo.name} (#{repo.id})..."
 
 prs = client.pull_requests(repo.id, state: 'all')
-#merged_prs = prs.select{ |pr| !pr.merged_at.nil? and pr.number > 230 }
 merged_prs = prs.select{ |pr| !pr.merged_at.nil? }
+recent_prs = merged_prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_weeks < 1}
+puts "Number of PRs to analyze: #{recent_prs.size}"
 
-data = merged_prs.map do |pr|
+data = recent_prs.map do |pr|
+	time_to_merge = pr.merged_at.nil? ? nil : TimeDifference.between(pr.created_at, pr.merged_at).in_hours
+	wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
+	puts "#{pr.number} (#{pr.user.login}) Created: #{pr.created_at.localtime}, Merged: #{pr.merged_at.localtime}, Merge time: #{time_to_merge}"    	    	
+		
 	raw_comments = client.review_comments(repo.id, pr.number)     	
-	
+	puts "  Comments: #{raw_comments.size}"
+
    	raw_reviews = client.pull_request_reviews(repo.id,pr.number)
-    first_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login)}
-    second_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
-    
-	puts "First review: #{first_review&.submitted_at} #{first_review&.user&.login}"
-	puts "Second review: #{second_review&.submitted_at} #{second_review&.user&.login}"
-
-    time_to_merge = pr.merged_at.nil? ? nil : TimeDifference.between(pr.created_at, pr.merged_at).in_hours
+   	changes_requested = raw_reviews.count{|r| "CHANGES_REQUESTED".eql?(r.state)}
+   	puts "  Changes requested: #{changes_requested}" 	
+    	
+   	first_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login)}
     time_to_first_review =  first_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, first_review&.submitted_at).in_hours
-    time_to_second_review =  second_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, second_review&.submitted_at).in_hours
-    
-    wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
     wh_time_to_first_review =  first_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, first_review&.submitted_at) / 3600.0).round(2)
-    wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
-
-	puts "Created: #{pr.created_at.localtime}"
-	puts "Merged: #{pr.merged_at.localtime}"
-    puts "TTM: #{time_to_merge}"    
-    puts "whTTM: #{wh_time_to_merge}"
-    puts "TTFR: #{wh_time_to_first_review}"
-   	puts "#{pr.number}, #{pr.user.login}, #{pr.state}, #{raw_comments.size}, #{pr.created_at}, #{first_review&.submitted_at}, #{pr.merged_at}, #{time_to_first_review}, #{time_to_merge}, #{pr.closed_at}"
+	puts "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} TTM: #{time_to_first_review} TTMwh: #{wh_time_to_first_review}"
+		    	
+    second_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
+    time_to_second_review =  second_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, second_review&.submitted_at).in_hours
+   	wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
+	puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} TTM: #{time_to_second_review} TTMwh: #{wh_time_to_second_review}"
    	
-        {
-            title: pr.title,
-            number: pr.number,
-            user: pr.user.login,
-            state: pr.state,
-            comment_count: raw_comments.size,
+    {
+        title: pr.title,
+        number: pr.number,
+        user: pr.user.login,
+        state: pr.state,
+        comment_count: raw_comments.size,
+        changes_requested: changes_requested,
             
-            created_at: pr.created_at.localtime,
+        created_at: pr.created_at.localtime,
             
-            merged_at: pr.merged_at.localtime,
-            merge_time_h: time_to_merge || "",
-            merge_time_wh: wh_time_to_merge || "",
+        merged_at: pr.merged_at.localtime,
+        merge_time_h: time_to_merge || 0,
+        merge_time_wh: wh_time_to_merge || 0,
             
-			first_review_time_h: time_to_first_review || "",
-			first_review_time_wh: wh_time_to_first_review || "",
-			first_review_by: first_review&.user&.login,
+        first_review_at: first_review&.submitted_at&.localtime || "",
+		first_review_time_h: time_to_first_review || 0,
+		first_review_time_wh: wh_time_to_first_review || 0,
+		first_review_by: first_review&.user&.login,
 
-			second_review_time_h: time_to_second_review || "",
-			second_review_time_wh: wh_time_to_second_review || "",
-			second_review_by: second_review&.user&.login,
+        second_review_at: second_review&.submitted_at&.localtime || "",
+		second_review_time_h: time_to_second_review || 0,
+		second_review_time_wh: wh_time_to_second_review || 0,
+		second_review_by: second_review&.user&.login,
         }
 end
 
