@@ -60,6 +60,24 @@ data = grouped.map do |key, group|
    		raw_commits = client.pull_request_commits(repo.id, pr.number)
    		after_first_review = raw_commits.select{ |c| first_review!=nil && c.commit.committer.date > first_review.submitted_at}
    		puts("  Commits: #{raw_commits.size} AfterFirstReview: #{after_first_review.size}")
+   		
+   		# Analyze builds
+   		status = client.statuses(repo.id, pr.head.sha)
+   		done_status = status.select{|s| s.state=="success" || s.state=="failure" }
+   		status_map = done_status.map do |s| 
+   			start = status.detect{|i| i.state=="pending" && i.target_url==s.target_url}
+   			elapsed = start.nil? ? 0 : TimeDifference.between(s.created_at, start.created_at).in_minutes
+   			
+   			{
+   				state: s.state,
+   				elapsed: elapsed,
+   				build_url: s.target_url
+   			}
+   		end
+   		status_map.each { |s| puts "  Build #{s[:state]} - #{s[:elapsed]} minutes - #{s[:build_url]}"}
+   		
+   		success_build = status_map.detect{|s| s[:state]="success"}
+   		build_time = success_build.nil? ? 0 : success_build[:elapsed]
 
         {
             title: pr.title,
@@ -69,6 +87,8 @@ data = grouped.map do |key, group|
             comment_count: raw_comments.size,
             changes_requested: changes_requested,
             commits_after_first_review: after_first_review.size,
+            failed_builds: status_map.select{|s| s[:state]=="failure"}.size,
+            successful_build_time: build_time,
             
             created_at: pr.created_at.localtime,
             
@@ -88,11 +108,18 @@ data = grouped.map do |key, group|
 	
 	max_comments = per_pr.max_by {|s| s[:comment_count]}
 	max_changes = per_pr.max_by {|s| s[:changes_requested]}
+	
+		# Early in repo history some PRs didn't have a build - exclude those from build calculation time
+	pr_with_successful_builds = per_pr.select {|s| s[:successful_build_time] > 0}
+		
 	{
 		week: key,
 		pr_count: per_pr.size,
 		pr_with_commits_after_first_review: per_pr.select {|s| s[:commits_after_first_review] > 0}.size,
 		pr_with_changes_requested: per_pr.select {|s| s[:changes_requested] > 0}.size,
+		
+		pr_with_build_failure: per_pr.select {|s| s[:failed_builds] > 0}.size,
+		pr_average_build_time: (pr_with_successful_builds.sum{|s| s[:successful_build_time]} / pr_with_successful_builds.size.to_f).round(2),
 		
 		avg_comments: (per_pr.sum {|s| s[:comment_count]} / per_pr.size.to_f).round(2),
 		avg_changes_requested: (per_pr.sum {|s| s[:changes_requested]} / per_pr.size.to_f).round(2),
