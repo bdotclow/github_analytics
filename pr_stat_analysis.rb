@@ -9,6 +9,7 @@ require 'groupdate'
 require_relative 'PRHelpers'
 
 MAX_DAYS_TO_ANALYZE = 28
+DAYS_OFFSET = 0
 
 #Do an "export GITHUB_API=zzzz" before running
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'], per_page: 100)
@@ -28,7 +29,7 @@ reponame = ARGV[0]
 repo = client.repo(reponame)
 puts "Processing #{repo.name} (#{repo.id})..."
 
-recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE)
+recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
 puts "Done loading PRs: #{recent_merged_prs.size} to analyze"
 
 grouped = recent_merged_prs.group_by_week{|pr| pr.created_at}

@@ -109,14 +109,6 @@ def get_pr_stats(repo, client, prs)
 		build_time = successful_builds.sum{|s| s[:elapsed]} / successful_builds.size.to_f
         failed_builds = build_info[:completed_status_map].select{|s| s[:state]=="failure"}.size
 
-		build_please = raw_comments.detect{|i| i.body.downcase.include? "build please"}
-		build_please = client.issue_comments(repo.id, pr.number).detect{|i| i.body.downcase.include? "build please"}
-		build_please_date = build_please.nil? ? nil : build_please[:created_at]&.localtime
-		time_to_build_please = build_please.nil? ? nil : TimeDifference.between(pr.created_at, build_please[:created_at]).in_minutes
-		#puts "Build please: #{build_please_date}"
-		#puts "First Build Please: #{time_to_build_please} min"
-
-
 		{
             number: pr.number,
 
@@ -144,13 +136,13 @@ end
 #
 # Get the recently merged PRs that have been created less than max_days ago
 # (Don't use Octokit auto-pagination so it doesn't take forever to load the PR list) 
-def get_recent_merged_prs(client, repo, max_days) 
+def get_recent_merged_prs(client, repo, max_days, offset_days=0) 
 	ap = client.auto_paginate
 	client.auto_paginate = false
 	
 	prs = nil
 	merged_prs = []
-
+	puts "Finding PRs created between #{offset_days} and #{max_days+offset_days} days ago"
 	loop do
 		if prs.nil?
 			prs = client.pull_requests(repo.id, state: 'closed')
@@ -160,11 +152,19 @@ def get_recent_merged_prs(client, repo, max_days)
 	
 			prs = client.get(next_rel.href)
 		end
-				
-		recent_prs = prs.select{|pr| TimeDifference.between(Time.now, pr.created_at).in_days < max_days}
+		
+		recent_prs = prs.select do |pr|
+			days_ago = TimeDifference.between(Time.now, pr.created_at).in_days
+			in_range = days_ago > offset_days && days_ago < (max_days + offset_days)
+			#puts "#{pr.number} - #{days_ago} - #{in_range}"
+			in_range
+		end
+		#puts "--- #{recent_prs.size}"
 		merged_prs.concat recent_prs.select{ |pr| !pr.merged_at.nil? }
 		
-		break if (recent_prs.size < prs.size)
+		min_created = prs.min_by {|pr| pr.created}	
+		min_created_days_ago = min_created.nil? ? 0 : TimeDifference.between(Time.now, min_created.created_at).in_days
+		break if min_created_days_ago.nil? || min_created_days_ago > (max_days+offset_days)
 	end
 	
 	#puts "PRs merged during period: #{merged_prs.map{|pr| pr.number}}"
