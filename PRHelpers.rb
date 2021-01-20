@@ -47,7 +47,7 @@ def get_pr_review_info(client, repo, pr)
 		changes_requested: changes_requested,
 		
 		first_review_submitted_at: first_review&.submitted_at,
-		wh_time_to_first_review: time_to_first_review,
+		wh_time_to_first_review: wh_time_to_first_review,
 		wh_time_to_second_review: wh_time_to_second_review,
 	}
 end
