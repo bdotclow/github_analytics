@@ -132,7 +132,7 @@ def analyze_builds(client, repo, pr, commits)
 	
 	{
 		failed_builds: failed_builds,
-		successful_builds: successful_builds,
+		successful_builds: successful_builds.size,
 		build_time: build_time,
 		failures_solved_by_commit: failures_solved_by_commit,
    		spurious_failures: spurious_failures,
@@ -198,6 +198,7 @@ def get_pr_stats(repo, client, prs)
             changes_requested: review_info[:changes_requested],
             commits_after_first_review: after_first_review.size,
             
+            successful_builds: build_result[:successful_builds],
             avg_successful_build_time: build_result[:build_time],
             
             failed_builds: build_result[:failed_builds],

@@ -46,7 +46,7 @@ data = grouped.map do |key, group|
 	max_changes = per_pr.max_by {|s| s[:changes_requested]}
 	
 		# Early in repo history some PRs didn't have a build - exclude those from build calculation time
-	pr_with_successful_builds = per_pr.select {|s| s[:successful_build_time] > 0}
+	pr_with_successful_builds = per_pr.select {|s| s[:successful_builds] > 0}
 
 	pr_with_commits_after_first_review = per_pr.select {|s| s[:commits_after_first_review] > 0}.size
 	pr_with_changes_requested = per_pr.select {|s| s[:changes_requested] > 0}.size
@@ -61,6 +61,8 @@ data = grouped.map do |key, group|
 		median_lines_changed: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
 		median_file_count: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
 		
+		avg_failed_builds: PRHelpers.mean(per_pr.map {|s| s[:avg_successful_build_time]}),
+		
 		pr_with_commits_after_first_review: pr_with_commits_after_first_review,
 		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
 		
@@ -70,7 +72,7 @@ data = grouped.map do |key, group|
 		avg_merge_time_wh: PRHelpers.mean(per_pr.map{|s| s[:merge_time_wh]}),	
 		avg_time_to_first_review_wh: PRHelpers.mean(per_pr.map{|s| s[:first_review_time_wh]}),
 		avg_time_to_second_review_wh: PRHelpers.mean(per_pr.map {|s| s[:second_review_time_wh]}),
-		avg_successful_build_time: PRHelpers.mean(pr_with_successful_builds.map{|s| s[:successful_build_time]}),		
+		avg_successful_build_time: PRHelpers.mean(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
 		
 		median_merge_time_wh: PRHelpers.median(per_pr.map{|s| s[:merge_time_wh]}),	
 		median_time_to_first_review_wh: PRHelpers.median(per_pr.map{|s| s[:first_review_time_wh]}),
