@@ -50,34 +50,38 @@ data = grouped.map do |key, group|
 
 	pr_with_commits_after_first_review = per_pr.select {|s| s[:commits_after_first_review] > 0}.size
 	pr_with_changes_requested = per_pr.select {|s| s[:changes_requested] > 0}.size
+	pr_with_spurious_failures = per_pr.select {|s| s[:failed_builds_spurious] > 0}.size
 		
 	{
+			# The data that I want to track week by week, first
 		week: key,
 		pr_count: per_pr.size,
 		
-		avg_lines_changed: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
-		avg_file_count: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
+		percent_spurious_failures: (pr_with_spurious_failures*100 / per_pr.size.to_f).round(2),
+		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
+		percent_changes_requested: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
 		
 		median_lines_changed: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
 		median_file_count: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
 		
+		median_merge_time_wh: PRHelpers.median(per_pr.map{|s| s[:merge_time_wh]}),	
+		median_time_to_first_review_wh: PRHelpers.median(per_pr.map{|s| s[:first_review_time_wh]}),
+		median_time_to_second_review_wh: PRHelpers.median(per_pr.map {|s| s[:second_review_time_wh]}),
+		
+			# The rest of the data gives more detail or ways of looking at it
+		avg_lines_changed: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
+		avg_file_count: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
+		
 		pr_with_failed_build: per_pr.select {|s| s[:failed_builds] > 0}.size,
-		pr_with_spurious_failures: per_pr.select {|s| s[:failed_builds_spurious] > 0}.size,
-		
+		pr_with_spurious_failures: pr_with_spurious_failures,
 		pr_with_commits_after_first_review: pr_with_commits_after_first_review,
-		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
-		
 		pr_with_changes_requested: pr_with_changes_requested,
-		percent_changes_requested: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
 		
 		avg_merge_time_wh: PRHelpers.mean(per_pr.map{|s| s[:merge_time_wh]}),	
 		avg_time_to_first_review_wh: PRHelpers.mean(per_pr.map{|s| s[:first_review_time_wh]}),
 		avg_time_to_second_review_wh: PRHelpers.mean(per_pr.map {|s| s[:second_review_time_wh]}),
 		avg_successful_build_time: PRHelpers.mean(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
 		
-		median_merge_time_wh: PRHelpers.median(per_pr.map{|s| s[:merge_time_wh]}),	
-		median_time_to_first_review_wh: PRHelpers.median(per_pr.map{|s| s[:first_review_time_wh]}),
-		median_time_to_second_review_wh: PRHelpers.median(per_pr.map {|s| s[:second_review_time_wh]}),
 		median_successful_build_time: PRHelpers.median(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
 		
 		avg_comments: PRHelpers.mean(per_pr.map {|s| s[:comment_count]}),
