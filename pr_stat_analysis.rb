@@ -8,7 +8,7 @@ require 'groupdate'
 
 require_relative 'PRHelpers'
 
-MAX_DAYS_TO_ANALYZE = 8
+MAX_DAYS_TO_ANALYZE = 28
 DAYS_OFFSET = 0
 
 #Do an "export GITHUB_API=zzzz" before running
@@ -61,7 +61,8 @@ data = grouped.map do |key, group|
 		median_lines_changed: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
 		median_file_count: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
 		
-		failed_build_count: PRHelpers.mean(per_pr.map {|s| s[:failed_builds]}),
+		pr_with_failed_build: per_pr.select {|s| s[:failed_builds] > 0}.size,
+		pr_with_spurious_failures: per_pr.select {|s| s[:failed_builds_spurious] > 0}.size,
 		
 		pr_with_commits_after_first_review: pr_with_commits_after_first_review,
 		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
@@ -79,7 +80,6 @@ data = grouped.map do |key, group|
 		median_time_to_second_review_wh: PRHelpers.median(per_pr.map {|s| s[:second_review_time_wh]}),
 		median_successful_build_time: PRHelpers.median(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
 		
-		pr_with_build_failure: per_pr.select {|s| s[:failed_builds] > 0}.size,
 		avg_comments: PRHelpers.mean(per_pr.map {|s| s[:comment_count]}),
 		avg_changes_requested: PRHelpers.mean(per_pr.map {|s| s[:changes_requested]}),
 
