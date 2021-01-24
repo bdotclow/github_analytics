@@ -7,26 +7,6 @@ require 'working_hours'
 module PRHelpers
 	extend self
 
-# Stats about number of lines changed
-def get_pr_commit_stats(client, repo, commits) 
-	changes = 0
-	stats = commits.map do |commit|
-		c = client.commit(repo.id, commit.sha)
-			
-		{ 
-			total: c.stats.total,
-			additions: c.stats.additions,
-			deletions: c.stats.deletions
-		}
-	end
-	
-	{
-		changes: stats.sum{|h| h[:total]},
-		additions: stats.sum{|h| h[:additions]},
-		deletions: stats.sum{|h| h[:deletions]},
-	}
-end
-
 # Info about reviews - elapsed time until reviews happened, and count of CHANGED_REQUESTED revies
 def get_pr_review_info(client, repo, pr) 	
 	raw_reviews = client.pull_request_reviews(repo.id,pr.number)
@@ -141,7 +121,8 @@ def analyze_builds(client, repo, pr, commits)
 end
 
 def get_pr_stats(repo, client, prs) 
-	d  = prs.map do |pr|
+	prs.map do |pr_summary|
+		pr = client.pull_request(repo.id, pr_summary.number)
 		#puts "PR #{pr.number}"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
@@ -156,25 +137,9 @@ def get_pr_stats(repo, client, prs)
 			
 		end
 
-		# ******************
-		# Important: efficiency
-		# *******************
-		pr = client.pull_request(repo.id, pr.number)
-		puts "Changes: #{pr.additions+pr.deletions}"
-		puts "Comments: #{pr.comments}"
-		puts "Comments: #{pr.changed_files}"
-		
-		commit_stats = get_pr_commit_stats(client, repo, commits)
-		#ap commit_stats
-		
    			#NB: &.< handles the case when no first review - safe navigation evaluates to nil, which is falsey
    		after_first_review = commits.select{ |c| review_info[:first_review_submitted_at] &.< c.commit.committer.date }					 
    		#puts("  Commits after first review: #{after_first_review.size}")
-		
-		files = client.pull_request_files(repo.id, pr.number)
-		
-   		raw_comments = client.review_comments(repo.id, pr.number)  
-
 
    		# Analyze builds
    		build_result = Hash.new(0)
@@ -183,18 +148,19 @@ def get_pr_stats(repo, client, prs)
    		{
             number: pr.number,
 
-            lines_changed: commit_stats[:changes],
-            lines_added: commit_stats[:additions],
-            lines_removed: commit_stats[:deletions],
+            lines_changed: pr.additions + pr.deletions,
+            lines_added: pr.additions,
+            lines_removed: pr.deletions,
             
-            file_count: files.size,
+            file_count: pr.changed_files,
             commit_count: commits.size,
             
             merge_time_wh: wh_time_to_merge || 0,	
 			first_review_time_wh: review_info[:wh_time_to_first_review] || 0,
 			second_review_time_wh: review_info[:wh_time_to_second_review] || 0,
 
-            comment_count: raw_comments.size,
+            comment_count: pr.comments,
+            review_comment_count: pr.review_comments,
             changes_requested: review_info[:changes_requested],
             commits_after_first_review: after_first_review.size,
             
