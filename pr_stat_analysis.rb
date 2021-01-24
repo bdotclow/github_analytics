@@ -57,48 +57,46 @@ data = grouped.map do |key, group|
 		week: key,
 		pr_count: per_pr.size,
 		
-		percent_spurious_failures: (pr_with_spurious_failures*100 / per_pr.size.to_f).round(2),
-		percent_commits_after_first_review: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
-		percent_changes_requested: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
+		spurious_failures_percent: (pr_with_spurious_failures*100 / per_pr.size.to_f).round(2),
+		commits_after_first_review_percent: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
+		changes_requested_percent: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
 		
-		median_lines_changed: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
-		median_file_count: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
+		lines_changed_median: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
+		file_count_median: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
 		
-		median_merge_time_wh: PRHelpers.median(per_pr.map{|s| s[:merge_time_wh]}),	
-		median_time_to_first_review_wh: PRHelpers.median(per_pr.map{|s| s[:first_review_time_wh]}),
-		median_time_to_second_review_wh: PRHelpers.median(per_pr.map {|s| s[:second_review_time_wh]}),
+		merge_time_wh_median: PRHelpers.median(per_pr.map{|s| s[:merge_time_wh]}),	
+		time_to_first_review_wh_median: PRHelpers.median(per_pr.map{|s| s[:first_review_time_wh]}),
+		time_to_second_review_wh_median: PRHelpers.median(per_pr.map {|s| s[:second_review_time_wh]}),
 		
 			# The rest of the data gives more detail or ways of looking at it
-		avg_lines_changed: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
-		avg_file_count: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
+		lines_changed_avg: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
+		file_count_avg: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
 		
-		pr_with_failed_build: per_pr.select {|s| s[:failed_builds] > 0}.size,
-		pr_with_spurious_failures: pr_with_spurious_failures,
-		pr_with_commits_after_first_review: pr_with_commits_after_first_review,
-		pr_with_changes_requested: pr_with_changes_requested,
-		
-		avg_merge_time_wh: PRHelpers.mean(per_pr.map{|s| s[:merge_time_wh]}),	
-		avg_time_to_first_review_wh: PRHelpers.mean(per_pr.map{|s| s[:first_review_time_wh]}),
-		avg_time_to_second_review_wh: PRHelpers.mean(per_pr.map {|s| s[:second_review_time_wh]}),
-		avg_successful_build_time: PRHelpers.mean(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
-		
-		median_successful_build_time: PRHelpers.median(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
-		
-		avg_comments: PRHelpers.mean(per_pr.map {|s| s[:comment_count]}),
-		avg_changes_requested: PRHelpers.mean(per_pr.map {|s| s[:changes_requested]}),
+		failed_build_pr_count: per_pr.select {|s| s[:failed_builds] > 0}.size,
+		spurious_failures_pr_count: pr_with_spurious_failures,
+		commits_after_first_review_pr_count: pr_with_commits_after_first_review,
+		changes_requested_pr_count: pr_with_changes_requested,
 
-		max_comments: max_comments[:comment_count],
+		merge_time_wh_avg: PRHelpers.mean(per_pr.map{|s| s[:merge_time_wh]}),
+		merge_time_wh_max: per_pr.max_by {|s| s[:merge_time_wh]}[:merge_time_wh],
+		merge_time_wh_min: per_pr.min_by {|s| s[:merge_time_wh]}[:merge_time_wh],				
+			
+		time_to_first_review_wh_avg: PRHelpers.mean(per_pr.map{|s| s[:first_review_time_wh]}),
+		time_to_first_review_wh_max: per_pr.max_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
+		time_to_first_review_wh_min: per_pr.min_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
+
+		time_to_second_review_wh_avg: PRHelpers.mean(per_pr.map {|s| s[:second_review_time_wh]}),
+		time_to_second_review_wh_max: per_pr.max_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
+		time_to_second_review_wh_min: per_pr.min_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
 		
-		max_changes_requested: per_pr.max_by {|s| s[:changes_requested]}[:changes_requested],
+		successful_build_time_avg: PRHelpers.mean(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),			
+		successful_build_time_median: PRHelpers.median(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
 		
-		max_merge_time_wh: per_pr.max_by {|s| s[:merge_time_wh]}[:merge_time_wh],
-		min_merge_time_wh: per_pr.min_by {|s| s[:merge_time_wh]}[:merge_time_wh],				
+		comments_avg: PRHelpers.mean(per_pr.map {|s| s[:comment_count]}),
+		comments_max: max_comments[:comment_count],
 		
-		max_time_to_first_review_wh: per_pr.max_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
-		min_time_to_first_review_wh: per_pr.min_by {|s| s[:first_review_time_wh]}[:first_review_time_wh],
-		
-		max_time_to_second_review_wh: per_pr.max_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
-		min_time_to_second_review_wh: per_pr.min_by {|s| s[:second_review_time_wh]}[:second_review_time_wh],
+		changes_requested_avg: PRHelpers.mean(per_pr.map {|s| s[:changes_requested]}),
+		changes_requested_max: per_pr.max_by {|s| s[:changes_requested]}[:changes_requested],
 	}
 end
 
