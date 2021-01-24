@@ -55,32 +55,94 @@ end
 # Track information about builds by looking at statuses
 # Completed builds times determined by looking for statuses with matching target URLs
 # 	that have both a pending and a success/failure
-#
-# Return count of completed builds and information about each
-def get_build_info(client, repo, pr) 
-	status = client.statuses(repo.id, pr.head.sha)
+def get_build_info(client, repo, pr, commits) 
+		# Need to get the status attached to any commit in the PR
+	status = commits.map{|c| client.statuses(repo.id, c.sha)}.flatten
+
+	#status.each do |s|
+	#	puts "#{s['id']} #{s['state']} #{s['target_url']}"
+	#end
+	
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
-	completed_status_map = done_status.map do |s| 
+	done_status.map do |s| 
  		start = status.detect{|i| i.state=="pending" && i.target_url==s.target_url}
  		elapsed = start.nil? ? 0 : TimeDifference.between(s.created_at, start.created_at).in_minutes
    			
 		{
+			start: s.created_at,
    			state: s.state,
    			elapsed: elapsed,
    			build_url: s.target_url
 		}
    	end
- 	#completed_status_map.each { |s| puts "  Build #{s[:state]} - #{s[:elapsed]} minutes - #{s[:build_url]}"}
-   	
-   	{
-   	 	first_successful_build: completed_status_map.detect{|s| s[:state]="success"},
-   		completed_status_map: completed_status_map,
-   	}
+end
+
+def analyze_builds(client, repo, pr, commits) 
+   	build_info = get_build_info(client, repo, pr, commits)
+   	failed_builds = build_info.select{|s| "failure".eql?(s[:state])}.size
+	successful_builds = build_info.select{|s| "success".eql?(s[:state])}
+	build_time = successful_builds.sum{|s| s[:elapsed]} / successful_builds.size.to_f
+	
+   	puts "PR #{pr.number}: #{failed_builds} failed (#{build_info.size} total)"
+   	sorted_builds = build_info.sort_by{|x| x[:start]}
+
+	puts "   #{commits.size} commits: "					
+	commits.each do |ct|
+		puts "        #{ct.commit.committer.date} #{ct.sha}"
+	end
+
+	puts "   #{sorted_builds.size} builds: "
+		
+		# Try to find the root cause of any failures and track them					
+	failures_solved_by_commit = 0
+	spurious_failures = 0
+	total_resolved_failures = 0	
+
+			# Check if any commits happened between a failure and a success
+	last_failure_time = nil
+	sorted_builds.each_cons(2) do |e|
+		puts " Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
+		
+		if "failure".eql?(e[0][:state]) 
+			if last_failure_time.nil? 
+				last_failure_time = e[0][:start]
+			
+				puts " Failure start: #{last_failure_time}"
+			end
+		else 
+			last_failure_time = nil
+		end
+						
+		if !last_failure_time.nil? && "success".eql?(e[1][:state])
+				# success found
+			puts " Checking commits between: (#{last_failure_time} - (#{e[1][:start]})"
+			commit = commits.select{|c| c.commit.committer.date < e[1][:start] && c.commit.committer.date > last_failure_time}
+
+			if commit.empty? then
+				puts "     0 commits between these builds - spurious failure found!"
+				spurious_failures += 1
+			else
+				puts "     #{commit.size} commits between these builds - legitimate failure"
+				failures_solved_by_commit += 1
+			end
+		
+			total_resolved_failures += 1
+		end
+	end 
+	
+	{
+		failed_builds: failed_builds,
+		successful_builds: successful_builds,
+		build_time: build_time,
+		failures_solved_by_commit: failures_solved_by_commit,
+   		spurious_failures: spurious_failures,
+   		total_resolved_failures: total_resolved_failures, 
+	}
 end
 
 def get_pr_stats(repo, client, prs) 
-	prs.map do |pr|
-		puts "PR #{pr.number}"
+	d  = prs.map do |pr|
+		#puts "PR #{pr.number}"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
 		# Analyze reviews
@@ -89,6 +151,19 @@ def get_pr_stats(repo, client, prs)
 
 		# Analyze commits
 		commits = client.pull_request_commits(repo.id, pr.number)
+		commits.each do |c|
+			#puts "#{c.commit.committer.date} #{c.sha}"
+			
+		end
+
+		# ******************
+		# Important: efficiency
+		# *******************
+		pr = client.pull_request(repo.id, pr.number)
+		puts "Changes: #{pr.additions+pr.deletions}"
+		puts "Comments: #{pr.comments}"
+		puts "Comments: #{pr.changed_files}"
+		
 		commit_stats = get_pr_commit_stats(client, repo, commits)
 		#ap commit_stats
 		
@@ -102,14 +177,10 @@ def get_pr_stats(repo, client, prs)
 
 
    		# Analyze builds
-   		build_info = get_build_info(client, repo, pr)
-   		build_time = build_info[:first_successful_build].nil? ? 0 : build_info[:first_successful_build][:elapsed]
+   		build_result = Hash.new(0)
+   		build_result = analyze_builds(client, repo, pr, commits)
    		
-   		successful_builds = build_info[:completed_status_map].select{|s| s[:state]="success"}
-		build_time = successful_builds.sum{|s| s[:elapsed]} / successful_builds.size.to_f
-        failed_builds = build_info[:completed_status_map].select{|s| s[:state]=="failure"}.size
-
-		{
+   		{
             number: pr.number,
 
             lines_changed: commit_stats[:changes],
@@ -127,8 +198,11 @@ def get_pr_stats(repo, client, prs)
             changes_requested: review_info[:changes_requested],
             commits_after_first_review: after_first_review.size,
             
-            failed_builds: failed_builds,
-            successful_build_time: build_time,
+            avg_successful_build_time: build_result[:build_time],
+            
+            failed_builds: build_result[:failed_builds],
+            failed_builds_resolved_by_commits: build_result[:failures_solved_by_commit],
+            failed_builds_spurious: build_result[:spurious_failures],
         }
 	end
 end
