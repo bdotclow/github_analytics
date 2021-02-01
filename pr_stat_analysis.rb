@@ -50,6 +50,7 @@ data = grouped.map do |key, group|
 
 	pr_with_commits_after_first_review = per_pr.select {|s| s[:commits_after_first_review] > 0}.size
 	pr_with_changes_requested = per_pr.select {|s| s[:changes_requested] > 0}.size
+	pr_with_build_failures = per_pr.select {|s| s[:failed_builds] > 0}.size
 	pr_with_spurious_failures = per_pr.select {|s| s[:failed_builds_spurious] > 0}.size
 		
 	{
@@ -58,6 +59,7 @@ data = grouped.map do |key, group|
 		pr_count: per_pr.size,
 		
 		spurious_failures_percent: (pr_with_spurious_failures*100 / per_pr.size.to_f).round(2),
+		failed_build_percent: (pr_with_build_failures*100 / per_pr.size.to_f).round(2),
 		commits_after_first_review_percent: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
 		changes_requested_percent: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
 		
@@ -72,7 +74,7 @@ data = grouped.map do |key, group|
 		lines_changed_avg: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
 		file_count_avg: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
 		
-		failed_build_pr_count: per_pr.select {|s| s[:failed_builds] > 0}.size,
+		failed_build_pr_count: pr_with_build_failures,
 		spurious_failures_pr_count: pr_with_spurious_failures,
 		commits_after_first_review_pr_count: pr_with_commits_after_first_review,
 		changes_requested_pr_count: pr_with_changes_requested,
@@ -93,6 +95,7 @@ data = grouped.map do |key, group|
 		successful_build_time_median: PRHelpers.median(pr_with_successful_builds.map{|s| s[:avg_successful_build_time]}),		
 		
 		comments_avg: PRHelpers.mean(per_pr.map {|s| s[:comment_count]}),
+		review_comments_avg: PRHelpers.mean(per_pr.map {|s| s[:review_comment_count]}),
 		comments_max: max_comments[:comment_count],
 		
 		changes_requested_avg: PRHelpers.mean(per_pr.map {|s| s[:changes_requested]}),
