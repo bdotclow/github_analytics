@@ -198,7 +198,14 @@ def get_recent_merged_prs(client, repo, max_days, offset_days=0)
 			days_ago = TimeDifference.between(Time.now, pr.created_at).in_days
 			in_range = days_ago > offset_days && days_ago < (max_days + offset_days)
 			#puts "#{pr.number} - #{days_ago} - #{in_range}"
-			in_range
+			
+				# Exclude dependabot - not interested in how hard the bot works!
+			is_dependabot = "dependabot[bot]".eql?(pr.user.login)
+			
+				# Exclude those that were closed but not merged
+			is_merged = !pr.merged_at.nil?
+						
+			in_range && !is_dependabot
 		end
 		#puts "--- #{recent_prs.size}"
 		merged_prs.concat recent_prs.select{ |pr| !pr.merged_at.nil? }
