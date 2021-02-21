@@ -120,8 +120,10 @@ def analyze_builds(client, repo, pr, commits)
 	}
 end
 
-def get_pr_stats(repo, client, prs) 
+def get_pr_stats(client, prs) 
 	prs.map do |pr_summary|
+
+		repo = pr_summary.head.repo
 		pr = client.pull_request(repo.id, pr_summary.number)
 		#puts "PR #{pr.number}"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)

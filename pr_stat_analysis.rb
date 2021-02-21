@@ -10,6 +10,7 @@ require_relative 'PRHelpers'
 
 MAX_DAYS_TO_ANALYZE = 28
 DAYS_OFFSET = 0
+REPO_FILE = "repos.txt"
 
 #Do an "export GITHUB_API=zzzz" before running
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'], per_page: 100)
@@ -26,11 +27,26 @@ WorkingHours::Config.time_zone = "Eastern Time (US & Canada)"
 Groupdate.time_zone = "Eastern Time (US & Canada)"
 
 reponame = ARGV[0]
-repo = client.repo(reponame)
-puts "Processing #{repo.name} (#{repo.id})..."
+if reponame.nil? 
+	puts "Reading repositorys from #{REPO_FILE}"
+	repos = File.readlines(REPO_FILE, chomp: true)
+else
+	puts "#{reponame} was specified on command line"
+	repos = [reponame]
+end
 
-recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
-puts "Done loading PRs: #{recent_merged_prs.size} to analyze"
+recent_merged_prs = []
+repos.each do |r|
+	repo = client.repo(r)
+	puts "Processing #{repo.name} (#{repo.id})..."
+
+	recent = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
+	puts "Done loading PRs: #{recent.size} to analyze"
+	
+	recent_merged_prs.concat recent
+end
+
+
 
 grouped = recent_merged_prs.group_by_week{|pr| pr.created_at}
 
@@ -38,7 +54,7 @@ data = grouped.map do |key, group|
 	puts "---- #{key} (#{group.size} PRs)----"
 
 	start = Time.now
-	per_pr = PRHelpers.get_pr_stats(repo, client, group)
+	per_pr = PRHelpers.get_pr_stats(client, group)
 	
 	puts "Took #{Time.now - start} seconds to process #{group.size} PRs"
 	
@@ -112,4 +128,6 @@ s=CSV.generate do |csv|
     csv << x.values
   end
 end
-File.write("#{repo.name}-stats.csv", s)
+
+filename = reponame.nil? ? "multiple-stats.csv" : "#{repo.name}-stats.csv"
+File.write(filename, s)
