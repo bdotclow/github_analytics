@@ -129,5 +129,5 @@ s=CSV.generate do |csv|
   end
 end
 
-filename = reponame.nil? ? "multiple-stats.csv" : "#{repo.name}-stats.csv"
+filename = reponame.nil? ? "multiple-stats.csv" : "#{reponame}-stats.csv"
 File.write(filename, s)

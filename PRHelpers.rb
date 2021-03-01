@@ -125,7 +125,7 @@ def get_pr_stats(client, prs)
 
 		repo = pr_summary.head.repo
 		pr = client.pull_request(repo.id, pr_summary.number)
-		#puts "PR #{pr.number}"
+		puts "PR #{pr.number} (#{repo.name})"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
 		# Analyze reviews
