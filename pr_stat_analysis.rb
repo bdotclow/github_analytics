@@ -12,7 +12,7 @@ MAX_DAYS_TO_ANALYZE = 28
 DAYS_OFFSET = 0
 REPO_FILE = "repos.txt"
 
-#Do an "export GITHUB_API=zzzz" before running
+PRHelpers.validate_api_key_provided() 
 client = Octokit::Client.new(access_token: ENV['GITHUB_API'], per_page: 100)
 client.auto_paginate = true
 

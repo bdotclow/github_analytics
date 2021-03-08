@@ -6,6 +6,13 @@ require 'working_hours'
 
 module PRHelpers
 	extend self
+	
+def validate_api_key_provided() 
+	if ENV['GITHUB_API'].nil? then
+		puts "You must specify GITHUB_API environment variable"
+		exit(1)
+	end
+end
 
 # Info about reviews - elapsed time until reviews happened, and count of CHANGED_REQUESTED revies
 def get_pr_review_info(client, repo, pr) 	
