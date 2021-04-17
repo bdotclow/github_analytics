@@ -3,13 +3,22 @@ require 'amazing_print'
 require 'byebug'
 require 'time_difference'
 require 'working_hours'
+require 'logger'
+
+LOGGER = Logger.new(STDOUT)
+LOGGER.level = Logger::INFO
+LOGGER.formatter = proc do |severity, datetime, progname, msg|
+  "#{msg}\n"
+end
 
 module PRHelpers
 	extend self
 	
+
+
 def validate_api_key_provided() 
 	if ENV['GITHUB_API'].nil? then
-		puts "You must specify GITHUB_API environment variable"
+		LOGGER.warn "You must specify GITHUB_API environment variable"
 		exit(1)
 	end
 end
@@ -18,17 +27,17 @@ end
 def get_pr_review_info(client, repo, pr) 	
 	raw_reviews = client.pull_request_reviews(repo.id,pr.number)
    	changes_requested = raw_reviews.count{|r| "CHANGES_REQUESTED".eql?(r.state)}
-   	#puts "  Changes requested: #{changes_requested}" 	
+   	LOGGER.debug "  Changes requested: #{changes_requested}"
 	   	
    	first_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login)}
     time_to_first_review =  first_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, first_review&.submitted_at).in_hours
     wh_time_to_first_review =  first_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, first_review&.submitted_at) / 3600.0).round(2)
-	#puts "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} Hours: #{time_to_first_review} WorkingHours: #{wh_time_to_first_review}"
+	LOGGER.debug "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} Hours: #{time_to_first_review} WorkingHours: #{wh_time_to_first_review}"
 		    	
     second_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
     time_to_second_review =  second_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, second_review&.submitted_at).in_hours
    	wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
-	#puts "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"   	
+	LOGGER.debug "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"   	
 	
 	{ 
 		changes_requested: changes_requested,
@@ -48,7 +57,7 @@ def get_build_info(client, repo, pr, commits)
 	status = status.sort_by{|x| x[:created_at]}
 
 	status.each do |s|
-		#puts "   #{s['created_at']} #{s['state']} (#{s['description']}) #{s['target_url']}"
+		LOGGER.debug "   #{s['created_at']} #{s['state']} (#{s['description']}) #{s['target_url']}"
 	end
 	
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
@@ -75,14 +84,14 @@ def analyze_builds(client, repo, pr, commits)
    	sorted_builds = build_info.sort_by{|x| x[:start]}
    	#ap sorted_builds
 
-	puts "   #{commits.size} commits: "					
+	LOGGER.info "   #{commits.size} commits: "					
 	commits.each do |ct|
-		puts "        #{ct.commit.committer.date.localtime} #{ct.sha}"
+		LOGGER.info "        #{ct.commit.committer.date.localtime} #{ct.sha}"
 	end
 
-	puts "   #{sorted_builds.size} builds: "
+	LOGGER.info "   #{sorted_builds.size} builds: "
 	sorted_builds.each do |build|
-		puts "        #{build[:state]} #{build[:start]} -> #{build[:end]} #{build[:url]}"
+		LOGGER.info "        #{build[:state]} #{build[:start]} -> #{build[:end]} #{build[:url]}"
 	end
 		
 		# Try to find the root cause of any failures and track them					
@@ -93,13 +102,13 @@ def analyze_builds(client, repo, pr, commits)
 			# Check if any commits happened between a failure and a success
 	last_failure_time = nil
 	sorted_builds.each_cons(2) do |e|
-		#puts "   Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
+		LOGGER.debug "   Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
 		
 		if "failure".eql?(e[0][:state]) 
 			if last_failure_time.nil? 
 				last_failure_time = e[0][:start]
 			
-				#puts "        Failure start: #{last_failure_time}"
+				LOGGER.debug "        Failure start: #{last_failure_time}"
 			end
 		else 
 			last_failure_time = nil
@@ -107,14 +116,14 @@ def analyze_builds(client, repo, pr, commits)
 						
 		if !last_failure_time.nil? && "success".eql?(e[1][:state])
 				# success found
-			#puts "        Checking for commits between: (#{last_failure_time} - (#{e[1][:start]})"
+			LOGGER.debug "        Checking for commits between: (#{last_failure_time} - (#{e[1][:start]})"
 			commit = commits.select{|c| c.commit.committer.date.localtime < e[1][:start] && c.commit.committer.date.localtime > last_failure_time}
 
 			if commit.empty? then
-				#puts "            0 commits between these builds - spurious failure found!"
+				LOGGER.debug "            0 commits between these builds - spurious failure found!"
 				spurious_failures += 1
 			else
-				#puts "            #{commit.size} commits between these builds - legitimate failure"
+				LOGGER.debug "            #{commit.size} commits between these builds - legitimate failure"
 				failures_solved_by_commit += 1
 			end
 		
@@ -122,7 +131,7 @@ def analyze_builds(client, repo, pr, commits)
 		end
 	end 
 	
-	puts "   Spurious Failures: #{spurious_failures}, Failures Solved By Commit: #{failures_solved_by_commit}"
+	LOGGER.info "   Spurious Failures: #{spurious_failures}, Failures Solved By Commit: #{failures_solved_by_commit}"
 	
 	{
 		failed_builds: failed_builds,
@@ -140,9 +149,9 @@ def get_pr_stats(client, prs)
 		repo = pr_summary.head.repo
 		pr = client.pull_request(repo.id, pr_summary.number)
 		
-		puts "\nPR #{pr.number} (#{repo.name}) - #{pr.title}"
-		puts "    #{pr.html_url}"
-		puts "    #{pr.head.ref} -> #{pr.base.ref} (default=#{pr.base.ref.eql?(pr.base.repo.default_branch)})"
+		LOGGER.info "\nPR #{pr.number} (#{repo.name}) - #{pr.title}"
+		LOGGER.info "    #{pr.html_url}"
+		LOGGER.info "    #{pr.head.ref} -> #{pr.base.ref} (default=#{pr.base.ref.eql?(pr.base.repo.default_branch)})"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
 		# Analyze reviews
@@ -152,13 +161,13 @@ def get_pr_stats(client, prs)
 		# Analyze commits
 		commits = client.pull_request_commits(repo.id, pr.number)
 		commits.each do |c|
-			#puts "#{c.commit.committer.date} #{c.sha}"
+			LOGGER.debug "#{c.commit.committer.date} #{c.sha}"
 			
 		end
 
    			#NB: &.< handles the case when no first review - safe navigation evaluates to nil, which is falsey
    		after_first_review = commits.select{ |c| review_info[:first_review_submitted_at] &.< c.commit.committer.date }					 
-   		#puts("  Commits after first review: #{after_first_review.size}")
+   		LOGGER.debug("  Commits after first review: #{after_first_review.size}")
 
    		# Analyze builds
    		build_result = Hash.new(0)
@@ -203,7 +212,7 @@ def get_recent_merged_prs(client, repo, max_days, offset_days=0)
 	
 	prs = nil
 	merged_prs = []
-	puts "Finding PRs created between #{offset_days} and #{max_days+offset_days} days ago"
+	LOGGER.info "Finding PRs created between #{offset_days} and #{max_days+offset_days} days ago"
 	loop do
 		if prs.nil?
 			prs = client.pull_requests(repo.id, state: 'closed')
@@ -217,7 +226,7 @@ def get_recent_merged_prs(client, repo, max_days, offset_days=0)
 		recent_prs = prs.select do |pr|
 			days_ago = TimeDifference.between(Time.now, pr.created_at).in_days
 			in_range = days_ago > offset_days && days_ago < (max_days + offset_days)
-			#puts "#{pr.number} - #{days_ago} - #{in_range}"
+			LOGGER.debug "#{pr.number} - #{days_ago} - #{in_range}"
 			
 				# Exclude dependabot - not interested in how hard the bot works!
 			is_dependabot = "dependabot[bot]".eql?(pr.user.login)
@@ -227,7 +236,7 @@ def get_recent_merged_prs(client, repo, max_days, offset_days=0)
 						
 			in_range && !is_dependabot
 		end
-		#puts "--- #{recent_prs.size}"
+		LOGGER.debug "--- #{recent_prs.size}"
 		merged_prs.concat recent_prs.select{ |pr| !pr.merged_at.nil? }
 		
 		min_created = prs.min_by {|pr| pr.created}	
@@ -235,7 +244,7 @@ def get_recent_merged_prs(client, repo, max_days, offset_days=0)
 		break if min_created_days_ago.nil? || min_created_days_ago > (max_days+offset_days)
 	end
 	
-	#puts "PRs merged during period: #{merged_prs.map{|pr| pr.number}}"
+	LOGGER.debug "PRs merged during period: #{merged_prs.map{|pr| pr.number}}"
 	client.auto_paginate = true
 	merged_prs
 end
