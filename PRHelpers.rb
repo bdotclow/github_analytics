@@ -45,10 +45,11 @@ end
 def get_build_info(client, repo, pr, commits) 
 		# Need to get the status attached to any commit in the PR
 	status = commits.map{|c| client.statuses(repo.id, c.sha)}.flatten
+	status = status.sort_by{|x| x[:created_at]}
 
-	#status.each do |s|
-	#	puts "#{s['id']} #{s['state']} #{s['target_url']}"
-	#end
+	status.each do |s|
+		#puts "   #{s['created_at']} #{s['state']} (#{s['description']}) #{s['target_url']}"
+	end
 	
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
 	done_status.map do |s| 
@@ -56,7 +57,8 @@ def get_build_info(client, repo, pr, commits)
  		elapsed = start.nil? ? 0 : TimeDifference.between(s.created_at, start.created_at).in_minutes
    			
 		{
-			start: s.created_at,
+			start: start.created_at.localtime,
+			end: s.created_at.localtime,
    			state: s.state,
    			elapsed: elapsed,
    			build_url: s.target_url
@@ -70,15 +72,18 @@ def analyze_builds(client, repo, pr, commits)
 	successful_builds = build_info.select{|s| "success".eql?(s[:state])}
 	build_time = successful_builds.sum{|s| s[:elapsed]} / successful_builds.size.to_f
 	
-   	puts "PR #{pr.number}: #{failed_builds} failed (#{build_info.size} total)"
    	sorted_builds = build_info.sort_by{|x| x[:start]}
+   	#ap sorted_builds
 
 	puts "   #{commits.size} commits: "					
 	commits.each do |ct|
-		puts "        #{ct.commit.committer.date} #{ct.sha}"
+		puts "        #{ct.commit.committer.date.localtime} #{ct.sha}"
 	end
 
 	puts "   #{sorted_builds.size} builds: "
+	sorted_builds.each do |build|
+		puts "        #{build[:state]} #{build[:start]} -> #{build[:end]} #{build[:url]}"
+	end
 		
 		# Try to find the root cause of any failures and track them					
 	failures_solved_by_commit = 0
@@ -88,13 +93,13 @@ def analyze_builds(client, repo, pr, commits)
 			# Check if any commits happened between a failure and a success
 	last_failure_time = nil
 	sorted_builds.each_cons(2) do |e|
-		puts " Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
+		#puts "   Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
 		
 		if "failure".eql?(e[0][:state]) 
 			if last_failure_time.nil? 
 				last_failure_time = e[0][:start]
 			
-				puts " Failure start: #{last_failure_time}"
+				#puts "        Failure start: #{last_failure_time}"
 			end
 		else 
 			last_failure_time = nil
@@ -102,20 +107,22 @@ def analyze_builds(client, repo, pr, commits)
 						
 		if !last_failure_time.nil? && "success".eql?(e[1][:state])
 				# success found
-			puts " Checking commits between: (#{last_failure_time} - (#{e[1][:start]})"
-			commit = commits.select{|c| c.commit.committer.date < e[1][:start] && c.commit.committer.date > last_failure_time}
+			#puts "        Checking for commits between: (#{last_failure_time} - (#{e[1][:start]})"
+			commit = commits.select{|c| c.commit.committer.date.localtime < e[1][:start] && c.commit.committer.date.localtime > last_failure_time}
 
 			if commit.empty? then
-				puts "     0 commits between these builds - spurious failure found!"
+				#puts "            0 commits between these builds - spurious failure found!"
 				spurious_failures += 1
 			else
-				puts "     #{commit.size} commits between these builds - legitimate failure"
+				#puts "            #{commit.size} commits between these builds - legitimate failure"
 				failures_solved_by_commit += 1
 			end
 		
 			total_resolved_failures += 1
 		end
 	end 
+	
+	puts "   Spurious Failures: #{spurious_failures}, Failures Solved By Commit: #{failures_solved_by_commit}"
 	
 	{
 		failed_builds: failed_builds,
@@ -132,7 +139,10 @@ def get_pr_stats(client, prs)
 
 		repo = pr_summary.head.repo
 		pr = client.pull_request(repo.id, pr_summary.number)
-		puts "PR #{pr.number} (#{repo.name})"
+		
+		puts "\nPR #{pr.number} (#{repo.name}) - #{pr.title}"
+		puts "    #{pr.html_url}"
+		puts "    #{pr.head.ref} -> #{pr.base.ref} (default=#{pr.base.ref.eql?(pr.base.repo.default_branch)})"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
 		# Analyze reviews
@@ -173,6 +183,7 @@ def get_pr_stats(client, prs)
             changes_requested: review_info[:changes_requested],
             commits_after_first_review: after_first_review.size,
             
+            total_builds: build_result.size,
             successful_builds: build_result[:successful_builds],
             avg_successful_build_time: build_result[:build_time],
             
@@ -241,6 +252,11 @@ def median(array, already_sorted=false)
   m_pos = array.size / 2
   return array.size % 2 == 1 ? array[m_pos] : mean(array[m_pos-1..m_pos])
 end
+
+def percent(num, den) 
+	(num * 100 / den.to_f).round(2)
+end
+
 
 end
 

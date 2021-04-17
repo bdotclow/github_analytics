@@ -8,7 +8,7 @@ require 'groupdate'
 
 require_relative 'PRHelpers'
 
-MAX_DAYS_TO_ANALYZE = 28
+MAX_DAYS_TO_ANALYZE = 7
 DAYS_OFFSET = 0
 REPO_FILE = "repos.txt"
 
@@ -35,18 +35,25 @@ else
 	repos = [reponame]
 end
 
+specific_pr = ARGV[1]
+
 recent_merged_prs = []
-repos.each do |r|
-	repo = client.repo(r)
-	puts "Processing #{repo.name} (#{repo.id})..."
+if specific_pr.nil?
+	repos.each do |r|
+		repo = client.repo(r)
+		puts "Processing #{repo.name} (#{repo.id})..."
 
-	recent = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
-	puts "Done loading PRs: #{recent.size} to analyze"
+		recent = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
+		puts "Done loading PRs: #{recent.size} to analyze"
 	
-	recent_merged_prs.concat recent
+		recent_merged_prs.concat recent
+	end
+else
+	puts "PR #{specific_pr} was specified on command line"
+	repo = client.repo(reponame)
+	pr = client.pull_request(repo.id, specific_pr)
+	recent_merged_prs = [pr]
 end
-
-
 
 grouped = recent_merged_prs.group_by_week{|pr| pr.created_at}
 
@@ -68,16 +75,26 @@ data = grouped.map do |key, group|
 	pr_with_changes_requested = per_pr.select {|s| s[:changes_requested] > 0}.size
 	pr_with_build_failures = per_pr.select {|s| s[:failed_builds] > 0}.size
 	pr_with_spurious_failures = per_pr.select {|s| s[:failed_builds_spurious] > 0}.size
-		
+
+		# Total builds
+	build_total = per_pr.map{|x| x[:total_builds]}.inject(0) { |sum, x| sum += x }	
+	build_failures = per_pr.map{|x| x[:failed_builds]}.inject(0) { |sum, x| sum += x }
+	puts "Total Failures: #{build_failures} / #{build_total}"
+	build_spurious_failures = per_pr.map{|x| x[:failed_builds_spurious]}.inject(0) { |sum, x| sum += x }
+	puts "Total Spurious: #{build_spurious_failures} / #{build_total}"
+
 	{
 			# The data that I want to track week by week, first
 		week: key,
 		pr_count: per_pr.size,
 		
-		spurious_failures_percent: (pr_with_spurious_failures*100 / per_pr.size.to_f).round(2),
-		failed_build_percent: (pr_with_build_failures*100 / per_pr.size.to_f).round(2),
-		commits_after_first_review_percent: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
-		changes_requested_percent: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
+		pr_spurious_failures_percent: (pr_with_spurious_failures*100 / per_pr.size.to_f).round(2),
+		pr_failed_build_percent: (pr_with_build_failures*100 / per_pr.size.to_f).round(2),
+		pr_commits_after_first_review_percent: (pr_with_commits_after_first_review*100 / per_pr.size.to_f).round(2),
+		pr_changes_requested_percent: (pr_with_changes_requested*100 / per_pr.size.to_f).round(2),
+		
+		builds_failure_percent: PRHelpers.percent(build_failures, build_total),
+		builds_spurious_failures_percent: PRHelpers.percent(build_spurious_failures, build_total),
 		
 		lines_changed_median: PRHelpers.median(per_pr.map {|s| s[:lines_changed]}),
 		file_count_median: PRHelpers.median(per_pr.map {|s| s[:file_count]}),
@@ -90,10 +107,14 @@ data = grouped.map do |key, group|
 		lines_changed_avg: PRHelpers.mean(per_pr.map {|s| s[:lines_changed]}),
 		file_count_avg: PRHelpers.mean(per_pr.map {|s| s[:file_count]}),
 		
-		failed_build_pr_count: pr_with_build_failures,
+		failed_build_pr_count: pr_with_build_failures,	
 		spurious_failures_pr_count: pr_with_spurious_failures,
 		commits_after_first_review_pr_count: pr_with_commits_after_first_review,
 		changes_requested_pr_count: pr_with_changes_requested,
+		
+		build_total: build_total,
+		failed_build_total_count: build_failures,
+		spurious_failures_total_count: build_spurious_failures,
 
 		merge_time_wh_avg: PRHelpers.mean(per_pr.map{|s| s[:merge_time_wh]}),
 		merge_time_wh_max: per_pr.max_by {|s| s[:merge_time_wh]}[:merge_time_wh],
