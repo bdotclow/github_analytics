@@ -134,6 +134,7 @@ def analyze_builds(client, repo, pr, commits)
 	LOGGER.info "   Spurious Failures: #{spurious_failures}, Failures Solved By Commit: #{failures_solved_by_commit}"
 	
 	{
+		total_builds: sorted_builds.size,
 		failed_builds: failed_builds,
 		successful_builds: successful_builds.size,
 		build_time: build_time,
@@ -192,7 +193,7 @@ def get_pr_stats(client, prs)
             changes_requested: review_info[:changes_requested],
             commits_after_first_review: after_first_review.size,
             
-            total_builds: build_result.size,
+            total_builds: build_result[:total_builds],
             successful_builds: build_result[:successful_builds],
             avg_successful_build_time: build_result[:build_time],
             
