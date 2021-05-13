@@ -5,6 +5,8 @@ require 'time_difference'
 require 'working_hours'
 require 'logger'
 
+require_relative 'JenkinsHelper'
+
 LOGGER = Logger.new(STDOUT)
 LOGGER.level = Logger::INFO
 LOGGER.formatter = proc do |severity, datetime, progname, msg|
@@ -57,7 +59,7 @@ def get_build_info(client, repo, pr, commits)
 	status = status.sort_by{|x| x[:created_at]}
 
 	status.each do |s|
-		LOGGER.debug "   #{s['created_at']} #{s['state']} (#{s['description']}) #{s['target_url']}"
+		LOGGER.debug "   #{s['created_at'].localtime} #{s['state']} (#{s['description']}) #{s['target_url']}"
 	end
 	
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
@@ -105,6 +107,7 @@ def analyze_builds(client, repo, pr, commits)
 		LOGGER.debug "   Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
 		
 		if "failure".eql?(e[0][:state]) 
+			#JenkinsHelper.analyze_failure(e[0][:build_url])
 			if last_failure_time.nil? 
 				last_failure_time = e[0][:start]
 			
@@ -176,6 +179,8 @@ def get_pr_stats(client, prs)
    		
    		{
             number: pr.number,
+            created_at: pr.created_at.localtime,
+            url: pr.html_url,
 
             lines_changed: pr.additions + pr.deletions,
             lines_added: pr.additions,
