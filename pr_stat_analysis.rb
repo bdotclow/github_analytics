@@ -8,7 +8,7 @@ require 'groupdate'
 
 require_relative 'PRHelpers'
 
-MAX_DAYS_TO_ANALYZE = 21
+MAX_DAYS_TO_ANALYZE = 42
 DAYS_OFFSET = 0
 REPO_FILE = "repos.txt"
 

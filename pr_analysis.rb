@@ -7,7 +7,7 @@ require 'working_hours'
 
 require_relative 'PRHelpers'
 
-MAX_DAYS_TO_ANALYZE = 14
+MAX_DAYS_TO_ANALYZE = 21
 DAYS_OFFSET = 0
 
 #Do an "export GITHUB_API=zzzz" before running

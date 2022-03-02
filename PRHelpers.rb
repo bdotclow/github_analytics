@@ -63,18 +63,20 @@ def get_build_info(client, repo, pr, commits)
 	end
 	
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
-	done_status.map do |s| 
- 		start = status.detect{|i| i.state=="pending" && i.target_url==s.target_url}
- 		elapsed = start.nil? ? 0 : TimeDifference.between(s.created_at, start.created_at).in_minutes
-   			
-		{
-			start: start.created_at.localtime,
-			end: s.created_at.localtime,
-   			state: s.state,
-   			elapsed: elapsed,
-   			build_url: s.target_url
-		}
-   	end
+   	
+   done_status.map do |s| 
+	   start = status.detect{|i| i.state=="pending" && i.target_url==s.target_url}
+	   elapsed = start.nil? ? 0 : TimeDifference.between(s.created_at, start.created_at).in_minutes
+	
+	   {
+		   start: start.nil? ? 0 : start.created_at.localtime,
+		   end: s.created_at.localtime,
+		   state: s.state,
+		   elapsed: elapsed,
+		   build_url: s.target_url
+	   }
+   end
+
 end
 
 def analyze_builds(client, repo, pr, commits) 
@@ -103,11 +105,16 @@ def analyze_builds(client, repo, pr, commits)
 
 			# Check if any commits happened between a failure and a success
 	last_failure_time = nil
+	failed_jobs = []
 	sorted_builds.each_cons(2) do |e|
 		LOGGER.debug "   Considering: (#{e[0][:start]} #{e[0][:state]}) - (#{e[1][:start]} #{e[1][:state]})"
 		
 		if "failure".eql?(e[0][:state]) 
-			#JenkinsHelper.analyze_failure(e[0][:build_url])
+			failed_job = JenkinsHelper.analyze_failure(e[0][:build_url])
+			if !failed_job.nil? 
+				failed_jobs.append(failed_job.strip)
+			end
+			
 			if last_failure_time.nil? 
 				last_failure_time = e[0][:start]
 			
@@ -133,12 +140,14 @@ def analyze_builds(client, repo, pr, commits)
 			total_resolved_failures += 1
 		end
 	end 
-	
+
 	LOGGER.info "   Spurious Failures: #{spurious_failures}, Failures Solved By Commit: #{failures_solved_by_commit}"
+	
 	
 	{
 		total_builds: sorted_builds.size,
 		failed_builds: failed_builds,
+		failed_jobs: failed_jobs.uniq.to_csv(row_sep: nil),
 		successful_builds: successful_builds.size,
 		build_time: build_time,
 		failures_solved_by_commit: failures_solved_by_commit,
@@ -158,6 +167,10 @@ def get_pr_stats(client, prs)
 		LOGGER.info "    #{pr.head.ref} -> #{pr.base.ref} (default=#{pr.base.ref.eql?(pr.base.repo.default_branch)})"
 		wh_time_to_merge = pr.merged_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, pr.merged_at) / 3600.0).round(2)
 
+		LOGGER.info "    #{pr.user.login}"
+		LOGGER.info "    Time to merge: #{wh_time_to_merge}"
+		LOGGER.info "    #{pr.created_at} --> #{pr.merged_at}"
+		
 		# Analyze reviews
 		review_info = get_pr_review_info(client, repo, pr)
 		#ap review_info
@@ -203,6 +216,7 @@ def get_pr_stats(client, prs)
             avg_successful_build_time: build_result[:build_time],
             
             failed_builds: build_result[:failed_builds],
+            failed_jobs: build_result[:failed_jobs],
             failed_builds_resolved_by_commits: build_result[:failures_solved_by_commit],
             failed_builds_spurious: build_result[:spurious_failures],
         }
