@@ -27,7 +27,7 @@ puts "Processing #{repo.name} (#{repo.id})..."
 recent_merged_prs = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
 puts "Done loading PRs: #{recent_merged_prs.size} to analyze"
 
-data = PRHelpers.get_pr_stats(repo, client, recent_merged_prs)
+data = PRHelpers.get_pr_stats(client, recent_merged_prs)
 
 pr_with_failure = data.select{ |d| d[:failed_builds] >0 }.size
 total_resolved_failures = data.map{ |d| d[:failed_builds]}.sum
