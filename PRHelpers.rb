@@ -59,7 +59,7 @@ def get_build_info(client, repo, pr, commits)
 	status = status.sort_by{|x| x[:created_at]}
 
 	status.each do |s|
-		LOGGER.debug "   #{s['created_at'].localtime} #{s['state']} (#{s['description']}) #{s['target_url']}"
+		LOGGER.debug "   #{s['created_at'].localtime} | #{s['state']} | (#{s['description']}) | #{s['target_url']}"
 	end
 	
    	done_status = status.select{|s| s.state=="success" || s.state=="failure" }
@@ -69,7 +69,7 @@ def get_build_info(client, repo, pr, commits)
 	   elapsed = start.nil? ? 0 : TimeDifference.between(s.created_at, start.created_at).in_minutes
 	
 	   {
-		   start: start.nil? ? 0 : start.created_at.localtime,
+		   start: start.nil? ? nil : start.created_at.localtime,
 		   end: s.created_at.localtime,
 		   state: s.state,
 		   elapsed: elapsed,
@@ -85,7 +85,7 @@ def analyze_builds(client, repo, pr, commits)
 	successful_builds = build_info.select{|s| "success".eql?(s[:state])}
 	build_time = successful_builds.sum{|s| s[:elapsed]} / successful_builds.size.to_f
 	
-   	sorted_builds = build_info.sort_by{|x| x[:start]}
+   	sorted_builds = build_info.select{|x| !x[:start].nil?}.sort_by{|x| x[:start]}
    	#ap sorted_builds
 
 	LOGGER.info "   #{commits.size} commits: "					

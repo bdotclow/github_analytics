@@ -40,8 +40,9 @@ specific_pr = ARGV[1]
 recent_merged_prs = []
 if specific_pr.nil?
 	repos.each do |r|
+		puts "Processing #{r} ..."
 		repo = client.repo(r)
-		puts "Processing #{repo.name} (#{repo.id})..."
+		puts " Found repo #{repo.name} #{repo.id}"
 
 		recent = PRHelpers.get_recent_merged_prs(client, repo, MAX_DAYS_TO_ANALYZE, DAYS_OFFSET)
 		puts "Done loading PRs: #{recent.size} to analyze"
