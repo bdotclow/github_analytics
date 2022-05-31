@@ -30,13 +30,14 @@ def get_pr_review_info(client, repo, pr)
 	raw_reviews = client.pull_request_reviews(repo.id,pr.number)
    	changes_requested = raw_reviews.count{|r| "CHANGES_REQUESTED".eql?(r.state)}
    	LOGGER.debug "  Changes requested: #{changes_requested}"
-	   	
-   	first_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login)}
+
+		# NB: user is nil in the case that they have been deleted, too rare to handle the case in a better way
+   	first_review = raw_reviews.detect{|i| (!i.user.nil? and i.user.login != "github-actions" and i.user.login != pr.user.login)}
     time_to_first_review =  first_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, first_review&.submitted_at).in_hours
     wh_time_to_first_review =  first_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, first_review&.submitted_at) / 3600.0).round(2)
 	LOGGER.debug "  First review: #{first_review&.user&.login} #{first_review&.submitted_at&.localtime} Hours: #{time_to_first_review} WorkingHours: #{wh_time_to_first_review}"
 		    	
-    second_review = raw_reviews.detect{|i| (i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
+    second_review = raw_reviews.detect{|i| (!i.user.nil? and i.user.login != "github-actions" and i.user.login != pr.user.login and i.user.login != first_review&.user&.login)}
     time_to_second_review =  second_review&.submitted_at.nil? ? nil : TimeDifference.between(pr.created_at, second_review&.submitted_at).in_hours
    	wh_time_to_second_review =  second_review&.submitted_at.nil? ? nil : (WorkingHours.working_time_between(pr.created_at, second_review&.submitted_at) / 3600.0).round(2)
 	LOGGER.debug "  Second review: #{second_review&.user&.login} #{second_review&.submitted_at&.localtime} Hours: #{time_to_second_review} WorkingHours: #{wh_time_to_second_review}"   	
